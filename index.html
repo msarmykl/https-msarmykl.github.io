@@ -65,8 +65,10 @@ body{font-family:"Montserrat","Segoe UI",system-ui,sans-serif;overflow-x:hidden}
 .panel{background:rgba(0,22,56,.45);box-shadow:0 0 24px rgba(30,144,255,.2)}
 #ok{margin-top:14px;padding:12px 14px;border:1px solid #4db3ff;border-radius:8px;background:rgba(30,144,255,.18);color:#fff;font-weight:700}
 #ok:empty{display:none}
-#ok span{display:block;margin-top:6px;color:#e6f4ff}
+#ok span{white-space:pre-wrap;display:block;margin-top:6px;color:#e6f4ff}
 .tk{color:#e6f4ff}.tk a{color:#6cc4ff}
+.wa{display:inline-block;margin-top:10px;padding:8px 14px;border-radius:8px;background:#25d366;color:#04210f!important;font-weight:700;text-decoration:none}
+.aib{margin:8px 8px 0 0;padding:7px 13px;font-size:.9rem}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
@@ -89,6 +91,7 @@ body{font-family:"Montserrat","Segoe UI",system-ui,sans-serif;overflow-x:hidden}
       <h2>Open a ticket</h2>
       <label for="n">Name</label><input id="n">
       <label for="e">Email</label><input id="e" type="email">
+      <label for="ph">WhatsApp number with country code (optional)</label><input id="ph" type="tel" placeholder="919876543210">
       <label for="p">Priority</label>
       <select id="p"><option>Low</option><option selected>Medium</option><option>High</option></select>
       <label for="d">What's wrong?</label><textarea id="d" rows="4"></textarea>
@@ -113,10 +116,12 @@ SETUP (EmailJS, free, 200 emails/month):
 4. Account > General > copy the Public Key. 5. Paste the 3 values into EMAIL below, then upload this file as index.html.
 -->
 <script>
+const WORKER_URL="https://helpdesk-ai.msarmykl-helpdesk.workers.dev";
 const EMAIL={publicKey:"hgb0FuBlVr-2-U9yW",serviceId:"service_ft6ertc",templateId:"template_7l6szfi"};
 </script>
 <script>
 const KB=[
+ {k:["mobile","phone","smartphone","android","iphone","sim","signal","touch screen","hang"],a:"Restart the phone (hold the power button, then choose Restart). Charge it for 15 minutes, turn Airplane mode off, and check for system and app updates. For signal problems, take the SIM out and put it back in. If the screen is frozen, hold power and volume-down for 10-15 seconds. If it still fails, back up your data and ask a technician."},
  {k:["deleted","delete","disabled","suspended","banned","deactivated","recover","restore","account"],a:"A deleted or disabled account can't be fixed with a password reset. Ask your administrator or IT team to restore it (many systems keep deleted accounts for about 30 days). If it can't be restored, they can create a new account for you. Have your username and the date it was deleted ready."},
  {k:["password","reset","locked","login","forgot"],a:"To reset your password: open the sign-in page, choose 'Forgot password', and follow the email link. If your account is locked, wait 15 minutes or open a ticket."},
  {k:["wifi","wi-fi","internet","network","slow"],a:"Turn Wi-Fi off and on, forget the network and reconnect, then restart your router or device. If other people are also affected, open a ticket."},
@@ -132,6 +137,11 @@ const KB=[
  {k:["account","access","permission","denied","sign in","sign-in","2fa","otp","authenticator"],a:"Confirm your username, then reset your password. For code (OTP/2FA) problems, check your phone's time is automatic and request a new code."},
  {k:["storage","disk","space","full","battery","charging","charger","overheat","hot"],a:"Delete files you don't need and empty the bin. For charging problems, try another cable and outlet, and let the device cool down."}
 ];
+function waLink(t,ph){const n=(ph||"").replace(/\D/g,"");if(n.length<8)return;const m="Ticket #"+t.id+" ("+t.st+")\n"+t.sol;document.getElementById("ok").insertAdjacentHTML("beforeend",'<a class="wa" target="_blank" rel="noopener" href="https://wa.me/'+n+'?text='+encodeURIComponent(m)+'">Send on WhatsApp</a>')}
+let lastProblem="";
+function askAI(s){const q="IT help needed. Problem: "+lastProblem+". Please give simple step-by-step fixes.";try{navigator.clipboard.writeText(q)}catch(x){}
+ const u={claude:"https://claude.ai/new?q="+encodeURIComponent(q),gemini:"https://gemini.google.com/app",copilot:"https://copilot.microsoft.com/"}[s];window.open(u,"_blank","noopener")}
+function aiButtons(d){lastProblem=d;document.getElementById("ok").insertAdjacentHTML("beforeend",'<span>Need more help? Ask an AI. Your question is copied, so press Ctrl+V to paste it.</span><button class="aib" onclick="askAI(\'claude\')">Ask Claude</button><button class="aib" onclick="askAI(\'gemini\')">Ask Gemini</button><button class="aib" onclick="askAI(\'copilot\')">Ask Copilot</button>')}
 let tickets=[];
 try{tickets=JSON.parse(localStorage.getItem("tk")||"[]")}catch(e){}
 const esc=x=>x.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -143,10 +153,12 @@ document.getElementById("sub").onclick=async()=>{
  const n=document.getElementById("n").value.trim(),e=document.getElementById("e").value.trim(),d=document.getElementById("d").value.trim();
  const ok=document.getElementById("ok");
  if(!n||!e||!d){ok.textContent="Enter your name, email, and a description to submit.";return}
+ let aiText=null;
+ if(!WORKER_URL.startsWith("YOUR_")){ok.textContent="Finding a fix...";try{const r=await fetch(WORKER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({problem:d})});const j=await r.json();if(j&&j.answer)aiText=j.answer}catch(x){}}
  const hit=find(d);
- const t={id:1000+tickets.length+1,n,e,p:document.getElementById("p").value,d,st:hit?"Resolved automatically":"Sent to a technician",sol:hit?hit.a:"Try this first: restart the device, check cables and the internet connection, and install updates. A technician will also review your ticket and reply by email."};
+ const t={id:1000+tickets.length+1,n,e,p:document.getElementById("p").value,d,st:aiText?"Resolved by AI":(hit?"Resolved automatically":"Sent to a technician"),sol:aiText||(hit?hit.a:"Try this first: restart the device, check cables and the internet connection, and install updates. A technician will also review your ticket and reply by email.")};
  tickets.push(t);try{localStorage.setItem("tk",JSON.stringify(tickets))}catch(x){}
- ok.innerHTML="Ticket #"+t.id+": "+esc(t.st)+".<br><span style=\"font-weight:400\">Solution: "+esc(t.sol)+"</span>";document.getElementById("d").value="";show();
+ ok.innerHTML="Ticket #"+t.id+": "+esc(t.st)+".<br><span style=\"font-weight:400\">Solution: "+esc(t.sol)+"</span>";document.getElementById("d").value="";show();waLink(t,document.getElementById("ph").value);aiButtons(d);
  const note=m=>ok.insertAdjacentHTML("beforeend","<span>"+esc(m)+"</span>");
  if(EMAIL.publicKey.startsWith("YOUR_")||!window.emailjs){note("Email is not set up yet. Fill in the EMAIL settings at the top of the code.");return}
  note("Sending email to "+e+"...");
